@@ -29,6 +29,7 @@ fun SettingsScreen(
     val cmdVelTopic by viewModel.cmdVelTopic.collectAsState()
     val mapTopic by viewModel.mapTopic.collectAsState()
     val tfTopic by viewModel.tfTopic.collectAsState()
+    val cameraTopic by viewModel.cameraTopic.collectAsState()
     val maxLinearSpeed by viewModel.maxLinearSpeed.collectAsState()
     val maxAngularSpeed by viewModel.maxAngularSpeed.collectAsState()
     val mapThrottle by viewModel.mapThrottle.collectAsState()
@@ -39,6 +40,7 @@ fun SettingsScreen(
     var cmdVelTopicText by remember { mutableStateOf(cmdVelTopic) }
     var mapTopicText by remember { mutableStateOf(mapTopic) }
     var tfTopicText by remember { mutableStateOf(tfTopic) }
+    var cameraTopicText by remember { mutableStateOf(cameraTopic) }
     var mapThrottleText by remember { mutableStateOf(mapThrottle.toString()) }
     var tfThrottleText by remember { mutableStateOf(tfThrottle.toString()) }
     
@@ -48,6 +50,7 @@ fun SettingsScreen(
     LaunchedEffect(cmdVelTopic) { cmdVelTopicText = cmdVelTopic }
     LaunchedEffect(mapTopic) { mapTopicText = mapTopic }
     LaunchedEffect(tfTopic) { tfTopicText = tfTopic }
+    LaunchedEffect(cameraTopic) { cameraTopicText = cameraTopic }
     LaunchedEffect(mapThrottle) { mapThrottleText = mapThrottle.toString() }
     LaunchedEffect(tfThrottle) { tfThrottleText = tfThrottle.toString() }
     
@@ -164,6 +167,15 @@ fun SettingsScreen(
                     value = tfTopicText,
                     onValueChange = { tfTopicText = it },
                     onDone = { viewModel.saveTfTopic(tfTopicText) }
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                SettingTextField(
+                    label = "相机图像话题",
+                    value = cameraTopicText,
+                    onValueChange = { cameraTopicText = it },
+                    onDone = { viewModel.saveCameraTopic(cameraTopicText) }
                 )
             }
             

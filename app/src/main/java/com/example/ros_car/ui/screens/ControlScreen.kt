@@ -2,6 +2,7 @@ package com.example.ros_car.ui.screens
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -11,11 +12,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ros_car.viewmodel.RosViewModel
@@ -30,9 +34,12 @@ fun ControlScreen(
     onBack: () -> Unit
 ) {
     val mapBitmap by viewModel.mapBitmap.collectAsState()
+    val mapMetadata by viewModel.mapMetadata.collectAsState()
     val robotPose by viewModel.robotPose.collectAsState()
     val maxLinearSpeed by viewModel.maxLinearSpeed.collectAsState()
     val maxAngularSpeed by viewModel.maxAngularSpeed.collectAsState()
+    val cameraBitmap by viewModel.cameraBitmap.collectAsState()
+    val cameraEnabled by viewModel.cameraEnabled.collectAsState()
     
     var currentLinearX by remember { mutableStateOf(0f) }
     var currentLinearY by remember { mutableStateOf(0f) }
@@ -51,6 +58,7 @@ fun ControlScreen(
         // 地图背景
         MapView(
             bitmap = mapBitmap,
+            metadata = mapMetadata,
             robotPose = robotPose,
             modifier = Modifier.fillMaxSize()
         )
@@ -148,6 +156,100 @@ fun ControlScreen(
             }
         }
         
+        // 相机画面显示 (右上角，速度信息下方)
+        if (cameraEnabled) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 16.dp, top = 160.dp)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .width(200.dp)
+                        .height(150.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Black.copy(alpha = 0.7f)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        if (cameraBitmap != null) {
+                            Image(
+                                bitmap = cameraBitmap!!.asImageBitmap(),
+                                contentDescription = "相机画面",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.Fit
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "等待图像...",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        
+                        // 关闭按钮
+                        IconButton(
+                            onClick = { viewModel.toggleCamera(false) },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(4.dp)
+                                .size(24.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.Black.copy(alpha = 0.6f),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "✕",
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // 开启相机按钮
+            IconButton(
+                onClick = { viewModel.toggleCamera(true) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 16.dp, top = 160.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF2563eb).copy(alpha = 0.8f),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "📷",
+                            fontSize = 24.sp
+                        )
+                    }
+                }
+            }
+        }
+        
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -226,6 +328,7 @@ fun ControlScreen(
 @Composable
 fun MapView(
     bitmap: Bitmap?,
+    metadata: com.example.ros_car.data.MapMetadata?,
     robotPose: com.example.ros_car.rosbridge.RobotPose,
     modifier: Modifier = Modifier
 ) {
@@ -250,7 +353,7 @@ fun MapView(
             size = size
         )
         
-        if (bitmap != null) {
+        if (bitmap != null && metadata != null) {
             // 绘制地图
             val bitmapWidth = bitmap.width.toFloat()
             val bitmapHeight = bitmap.height.toFloat()
@@ -279,6 +382,7 @@ fun MapView(
             // 绘制机器人
             drawRobot(
                 pose = robotPose,
+                metadata = metadata,
                 centerX = centerX,
                 centerY = centerY,
                 mapScale = mapScale,
@@ -306,28 +410,33 @@ fun MapView(
 
 fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRobot(
     pose: com.example.ros_car.rosbridge.RobotPose,
+    metadata: com.example.ros_car.data.MapMetadata,
     centerX: Float,
     centerY: Float,
     mapScale: Float,
     mapWidth: Float,
     mapHeight: Float
 ) {
-    // 将机器人位置转换到屏幕坐标
-    // 这里假设地图原点在左下角，需要根据实际情况调整
-    val robotScreenX = centerX + (pose.x.toFloat() * mapScale * 50) // 50是像素/米的估算值
-    val robotScreenY = centerY - (pose.y.toFloat() * mapScale * 50)
+    // 将机器人世界坐标转换为地图像素坐标
+    val robotMapX = ((pose.x - metadata.originX) / metadata.resolution).toFloat()
+    val robotMapY = ((pose.y - metadata.originY) / metadata.resolution).toFloat()
+    
+    // 将地图像素坐标转换为屏幕坐标
+    // 注意：地图已经在createMapBitmap中翻转了Y轴，所以这里直接使用robotMapY
+    val robotScreenX = centerX - (mapWidth * mapScale / 2) + (robotMapX * mapScale)
+    val robotScreenY = centerY - (mapHeight * mapScale / 2) + ((mapHeight - robotMapY) * mapScale)
     
     // 绘制机器人圆形
     drawCircle(
         color = Color(0xFF10b981),
-        radius = 20f * mapScale,
+        radius = 20f,
         center = Offset(robotScreenX, robotScreenY),
         style = Stroke(width = 3f)
     )
     
     drawCircle(
         color = Color(0xFF10b981).copy(alpha = 0.3f),
-        radius = 20f * mapScale,
+        radius = 20f,
         center = Offset(robotScreenX, robotScreenY)
     )
     
@@ -336,7 +445,7 @@ fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRobot(
         degrees = -Math.toDegrees(pose.theta).toFloat(),
         pivot = Offset(robotScreenX, robotScreenY)
     ) {
-        val arrowLength = 30f * mapScale
+        val arrowLength = 30f
         drawLine(
             color = Color(0xFF10b981),
             start = Offset(robotScreenX, robotScreenY),
@@ -349,14 +458,14 @@ fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRobot(
         drawLine(
             color = Color(0xFF10b981),
             start = Offset(robotScreenX + arrowLength, robotScreenY),
-            end = Offset(robotScreenX + arrowLength - 10f * mapScale, robotScreenY - 8f * mapScale),
+            end = Offset(robotScreenX + arrowLength - 10f, robotScreenY - 8f),
             strokeWidth = 3f,
             cap = StrokeCap.Round
         )
         drawLine(
             color = Color(0xFF10b981),
             start = Offset(robotScreenX + arrowLength, robotScreenY),
-            end = Offset(robotScreenX + arrowLength - 10f * mapScale, robotScreenY + 8f * mapScale),
+            end = Offset(robotScreenX + arrowLength - 10f, robotScreenY + 8f),
             strokeWidth = 3f,
             cap = StrokeCap.Round
         )

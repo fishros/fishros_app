@@ -1,12 +1,16 @@
 package com.example.ros_car.viewmodel
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ros_car.data.*
 import com.example.ros_car.rosbridge.RosbridgeClient
 import com.example.ros_car.rosbridge.Twist
 import com.example.ros_car.rosbridge.Vector3
+import com.google.gson.JsonObject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -36,6 +40,11 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
     val maxAngularSpeed = settingsRepository.maxAngularSpeed.stateIn(viewModelScope, SharingStarted.Eagerly, 0.8f)
     val mapThrottle = settingsRepository.mapThrottle.stateIn(viewModelScope, SharingStarted.Eagerly, 1000)
     val tfThrottle = settingsRepository.tfThrottle.stateIn(viewModelScope, SharingStarted.Eagerly, 50)
+    val cameraTopic = settingsRepository.cameraTopic.stateIn(viewModelScope, SharingStarted.Eagerly, "/camera/image_raw")
+    val cameraEnabled = settingsRepository.cameraEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    
+    private val _cameraBitmap = MutableStateFlow<Bitmap?>(null)
+    val cameraBitmap: StateFlow<Bitmap?> = _cameraBitmap.asStateFlow()
     
     private var cmdVelPublishJob: Job? = null
     private var currentLinearVel = 0.0
@@ -88,6 +97,57 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
                 queueLength = 10
             ) { msg ->
                 tfManager.processTfStaticMessage(msg)
+            }
+            
+            // 订阅相机图像 (如果启用)
+            if (cameraEnabled.value) {
+                subscribeCameraImage()
+            }
+        }
+    }
+    
+    fun subscribeCameraImage() {
+        viewModelScope.launch {
+            rosbridgeClient.subscribe(
+                topic = cameraTopic.value,
+                messageType = "sensor_msgs/CompressedImage",
+                throttleRate = 200, // 5fps
+                queueLength = 1
+            ) { msg ->
+                processCameraImage(msg)
+            }
+        }
+    }
+    
+    fun unsubscribeCameraImage() {
+        viewModelScope.launch {
+            rosbridgeClient.unsubscribe(cameraTopic.value)
+            _cameraBitmap.value = null
+        }
+    }
+    
+    private fun processCameraImage(message: JsonObject) {
+        try {
+            val data = message.get("data")?.asString ?: return
+            
+            if (data.isNotEmpty()) {
+                // 解码Base64图像数据
+                val imageBytes = Base64.decode(data, Base64.DEFAULT)
+                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                _cameraBitmap.value = bitmap
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    fun toggleCamera(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.saveCameraEnabled(enabled)
+            if (enabled) {
+                subscribeCameraImage()
+            } else {
+                unsubscribeCameraImage()
             }
         }
     }
@@ -202,6 +262,12 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
     fun saveTfThrottle(throttle: Int) {
         viewModelScope.launch {
             settingsRepository.saveTfThrottle(throttle)
+        }
+    }
+    
+    fun saveCameraTopic(topic: String) {
+        viewModelScope.launch {
+            settingsRepository.saveCameraTopic(topic)
         }
     }
     

@@ -18,6 +18,8 @@ class SettingsRepository(private val context: Context) {
         val MAP_TOPIC = stringPreferencesKey("map_topic")
         val TF_TOPIC = stringPreferencesKey("tf_topic")
         val TF_STATIC_TOPIC = stringPreferencesKey("tf_static_topic")
+        val CAMERA_TOPIC = stringPreferencesKey("camera_topic")
+        val CAMERA_ENABLED = booleanPreferencesKey("camera_enabled")
         val MAX_LINEAR_SPEED = floatPreferencesKey("max_linear_speed")
         val MAX_ANGULAR_SPEED = floatPreferencesKey("max_angular_speed")
         val BASE_FRAME = stringPreferencesKey("base_frame")
@@ -72,6 +74,14 @@ class SettingsRepository(private val context: Context) {
 
     val tfThrottle: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[TF_THROTTLE] ?: 50 // 50ms
+    }
+
+    val cameraTopic: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[CAMERA_TOPIC] ?: "/camera/image_raw"
+    }
+
+    val cameraEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[CAMERA_ENABLED] ?: false
     }
 
     suspend fun saveLastConnection(ip: String, port: String) {
@@ -138,6 +148,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveTfThrottle(throttle: Int) {
         context.dataStore.edit { preferences ->
             preferences[TF_THROTTLE] = throttle
+        }
+    }
+
+    suspend fun saveCameraTopic(topic: String) {
+        context.dataStore.edit { preferences ->
+            preferences[CAMERA_TOPIC] = topic
+        }
+    }
+
+    suspend fun saveCameraEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[CAMERA_ENABLED] = enabled
         }
     }
 }
