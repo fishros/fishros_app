@@ -30,6 +30,7 @@ fun SettingsScreen(
     val mapTopic by viewModel.mapTopic.collectAsState()
     val tfTopic by viewModel.tfTopic.collectAsState()
     val cameraTopic by viewModel.cameraTopic.collectAsState()
+    val scanTopic by viewModel.scanTopic.collectAsState()
     val maxLinearSpeed by viewModel.maxLinearSpeed.collectAsState()
     val maxAngularSpeed by viewModel.maxAngularSpeed.collectAsState()
     val mapThrottle by viewModel.mapThrottle.collectAsState()
@@ -41,6 +42,7 @@ fun SettingsScreen(
     var mapTopicText by remember { mutableStateOf(mapTopic) }
     var tfTopicText by remember { mutableStateOf(tfTopic) }
     var cameraTopicText by remember { mutableStateOf(cameraTopic) }
+    var scanTopicText by remember { mutableStateOf(scanTopic) }
     var mapThrottleText by remember { mutableStateOf(mapThrottle.toString()) }
     var tfThrottleText by remember { mutableStateOf(tfThrottle.toString()) }
     
@@ -51,6 +53,7 @@ fun SettingsScreen(
     LaunchedEffect(mapTopic) { mapTopicText = mapTopic }
     LaunchedEffect(tfTopic) { tfTopicText = tfTopic }
     LaunchedEffect(cameraTopic) { cameraTopicText = cameraTopic }
+    LaunchedEffect(scanTopic) { scanTopicText = scanTopic }
     LaunchedEffect(mapThrottle) { mapThrottleText = mapThrottle.toString() }
     LaunchedEffect(tfThrottle) { tfThrottleText = tfThrottle.toString() }
     
@@ -176,6 +179,15 @@ fun SettingsScreen(
                     value = cameraTopicText,
                     onValueChange = { cameraTopicText = it },
                     onDone = { viewModel.saveCameraTopic(cameraTopicText) }
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                SettingTextField(
+                    label = "激光扫描话题",
+                    value = scanTopicText,
+                    onValueChange = { scanTopicText = it },
+                    onDone = { viewModel.saveScanTopic(scanTopicText) }
                 )
             }
             

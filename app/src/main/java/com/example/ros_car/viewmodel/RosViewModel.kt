@@ -22,12 +22,14 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private val tfManager = TfManager()
     private val mapManager = MapManager()
+    private val laserScanManager = LaserScanManager(tfManager)
     
     val connectionState = rosbridgeClient.connectionState
     val errorMessage = rosbridgeClient.errorMessage
     val robotPose = tfManager.robotPose
     val mapBitmap = mapManager.mapBitmap
     val mapMetadata = mapManager.metadata
+    val laserScan = laserScanManager.laserScan
     
     // 设置
     val lastIp = settingsRepository.lastIp.stateIn(viewModelScope, SharingStarted.Eagerly, "192.168.1.100")
@@ -42,6 +44,8 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
     val tfThrottle = settingsRepository.tfThrottle.stateIn(viewModelScope, SharingStarted.Eagerly, 50)
     val cameraTopic = settingsRepository.cameraTopic.stateIn(viewModelScope, SharingStarted.Eagerly, "/camera/image_raw")
     val cameraEnabled = settingsRepository.cameraEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val scanTopic = settingsRepository.scanTopic.stateIn(viewModelScope, SharingStarted.Eagerly, "/scan")
+    val scanEnabled = settingsRepository.scanEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     
     private val _cameraBitmap = MutableStateFlow<Bitmap?>(null)
     val cameraBitmap: StateFlow<Bitmap?> = _cameraBitmap.asStateFlow()
@@ -103,6 +107,11 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
             if (cameraEnabled.value) {
                 subscribeCameraImage()
             }
+            
+            // 订阅激光雷达扫描 (如果启用)
+            if (scanEnabled.value) {
+                subscribeLaserScan()
+            }
         }
     }
     
@@ -148,6 +157,37 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
                 subscribeCameraImage()
             } else {
                 unsubscribeCameraImage()
+            }
+        }
+    }
+    
+    fun subscribeLaserScan() {
+        viewModelScope.launch {
+            rosbridgeClient.subscribe(
+                topic = scanTopic.value,
+                messageType = "sensor_msgs/LaserScan",
+                throttleRate = 100, // 10Hz
+                queueLength = 1
+            ) { msg ->
+                laserScanManager.processLaserScanMessage(msg)
+            }
+        }
+    }
+    
+    fun unsubscribeLaserScan() {
+        viewModelScope.launch {
+            rosbridgeClient.unsubscribe(scanTopic.value)
+            laserScanManager.clear()
+        }
+    }
+    
+    fun toggleLaserScan(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.saveScanEnabled(enabled)
+            if (enabled) {
+                subscribeLaserScan()
+            } else {
+                unsubscribeLaserScan()
             }
         }
     }
@@ -268,6 +308,12 @@ class RosViewModel(application: Application) : AndroidViewModel(application) {
     fun saveCameraTopic(topic: String) {
         viewModelScope.launch {
             settingsRepository.saveCameraTopic(topic)
+        }
+    }
+    
+    fun saveScanTopic(topic: String) {
+        viewModelScope.launch {
+            settingsRepository.saveScanTopic(topic)
         }
     }
     

@@ -36,6 +36,8 @@ fun ControlScreen(
     val mapBitmap by viewModel.mapBitmap.collectAsState()
     val mapMetadata by viewModel.mapMetadata.collectAsState()
     val robotPose by viewModel.robotPose.collectAsState()
+    val laserScan by viewModel.laserScan.collectAsState()
+    val scanEnabled by viewModel.scanEnabled.collectAsState()
     val maxLinearSpeed by viewModel.maxLinearSpeed.collectAsState()
     val maxAngularSpeed by viewModel.maxAngularSpeed.collectAsState()
     val cameraBitmap by viewModel.cameraBitmap.collectAsState()
@@ -60,6 +62,8 @@ fun ControlScreen(
             bitmap = mapBitmap,
             metadata = mapMetadata,
             robotPose = robotPose,
+            laserScan = laserScan,
+            scanEnabled = scanEnabled,
             modifier = Modifier.fillMaxSize()
         )
         
@@ -117,6 +121,16 @@ fun ControlScreen(
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 12.sp
                 )
+                
+                // 激光扫描调试信息
+                laserScan?.let { scan ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Scan: ${scan.ranges.size} pts",
+                        color = Color(0xFF10b981).copy(alpha = 0.8f),
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
         
@@ -250,6 +264,31 @@ fun ControlScreen(
             }
         }
         
+        // 激光扫描开关按钮（左下角）
+        IconButton(
+            onClick = { viewModel.toggleLaserScan(!scanEnabled) },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = 250.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (scanEnabled) Color(0xFF10b981).copy(alpha = 0.8f) 
+                       else Color(0xFF6b7280).copy(alpha = 0.8f),
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "🔴",
+                        fontSize = 24.sp
+                    )
+                }
+            }
+        }
+        
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -330,6 +369,8 @@ fun MapView(
     bitmap: Bitmap?,
     metadata: com.example.ros_car.data.MapMetadata?,
     robotPose: com.example.ros_car.rosbridge.RobotPose,
+    laserScan: com.example.ros_car.rosbridge.LaserScan?,
+    scanEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     var scale by remember { mutableStateOf(1f) }
@@ -379,6 +420,20 @@ fun MapView(
             )
             drawContext.canvas.restore()
             
+            // 绘制激光扫描数据
+            if (scanEnabled && laserScan != null) {
+                drawLaserScan(
+                    laserScan = laserScan,
+                    robotPose = robotPose,
+                    metadata = metadata,
+                    centerX = centerX,
+                    centerY = centerY,
+                    mapScale = mapScale,
+                    mapWidth = bitmapWidth,
+                    mapHeight = bitmapHeight
+                )
+            }
+            
             // 绘制机器人
             drawRobot(
                 pose = robotPose,
@@ -405,6 +460,39 @@ fun MapView(
                 )
             }
         }
+    }
+}
+
+fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLaserScan(
+    laserScan: com.example.ros_car.rosbridge.LaserScan,
+    robotPose: com.example.ros_car.rosbridge.RobotPose,
+    metadata: com.example.ros_car.data.MapMetadata,
+    centerX: Float,
+    centerY: Float,
+    mapScale: Float,
+    mapWidth: Float,
+    mapHeight: Float
+) {
+    // 使用已转换的世界坐标点，避免TF不同步
+    val worldPoints = laserScan.worldPoints
+    if (worldPoints.isEmpty()) return
+    
+    // 绘制每个激光点
+    for (point in worldPoints) {
+        // 转换到地图像素坐标
+        val mapX = ((point.worldX - metadata.originX) / metadata.resolution).toFloat()
+        val mapY = ((point.worldY - metadata.originY) / metadata.resolution).toFloat()
+        
+        // 转换到屏幕坐标
+        val screenX = centerX - (mapWidth * mapScale / 2) + (mapX * mapScale)
+        val screenY = centerY - (mapHeight * mapScale / 2) + ((mapHeight - mapY) * mapScale)
+        
+        // 绘制激光点
+        drawCircle(
+            color = Color(0xFFff0000).copy(alpha = 0.7f),
+            radius = 2.5f,
+            center = Offset(screenX, screenY)
+        )
     }
 }
 

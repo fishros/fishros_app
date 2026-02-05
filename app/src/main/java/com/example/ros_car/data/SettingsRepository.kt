@@ -20,6 +20,8 @@ class SettingsRepository(private val context: Context) {
         val TF_STATIC_TOPIC = stringPreferencesKey("tf_static_topic")
         val CAMERA_TOPIC = stringPreferencesKey("camera_topic")
         val CAMERA_ENABLED = booleanPreferencesKey("camera_enabled")
+        val SCAN_TOPIC = stringPreferencesKey("scan_topic")
+        val SCAN_ENABLED = booleanPreferencesKey("scan_enabled")
         val MAX_LINEAR_SPEED = floatPreferencesKey("max_linear_speed")
         val MAX_ANGULAR_SPEED = floatPreferencesKey("max_angular_speed")
         val BASE_FRAME = stringPreferencesKey("base_frame")
@@ -82,6 +84,14 @@ class SettingsRepository(private val context: Context) {
 
     val cameraEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[CAMERA_ENABLED] ?: false
+    }
+
+    val scanTopic: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[SCAN_TOPIC] ?: "/scan"
+    }
+
+    val scanEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[SCAN_ENABLED] ?: true
     }
 
     suspend fun saveLastConnection(ip: String, port: String) {
@@ -160,6 +170,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveCameraEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[CAMERA_ENABLED] = enabled
+        }
+    }
+
+    suspend fun saveScanTopic(topic: String) {
+        context.dataStore.edit { preferences ->
+            preferences[SCAN_TOPIC] = topic
+        }
+    }
+
+    suspend fun saveScanEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SCAN_ENABLED] = enabled
         }
     }
 }
